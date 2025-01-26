@@ -275,6 +275,20 @@ async function run() {
     app.post('/success-payment', async(req, res) => {
       const paymentSuccess = req.body 
       console.log(paymentSuccess);
+      const {data} = await axios.get(`https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php?val_id=${paymentSuccess.val_id}&store_id=${store_id}&store_passwd=${store_passwd}&format=json`)
+      console.log(data);
+      if(data?.status !== 'VALID') return res.send({message: 'Invalid Payment'})
+        // after validation update the payment status to success 
+      const updatePayment = await paymentsCollection.findOne({transactionId: data.tran_id}, {$set: {status: 'Success'}})
+      const payment = await paymentsCollection.findOne({transactionId: data.tran_id})
+      const query = {
+        _id: {
+          $in: payment?.cartIds?.map(id => new ObjectId(id))
+        }
+      }
+      const deleteResult = await cartsCollection.deleteMany(query)
+      console.log(deleteResult);
+      res.redirect('http://localhost:5173/success')
     })
     // route for show data on admin home 
     app.get('/admin-stats', verifyToken, verifyAdmin,  async(req, res) => {
