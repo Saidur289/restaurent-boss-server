@@ -4,6 +4,8 @@ var morgan = require('morgan')
 const jwt = require('jsonwebtoken');
 const stripe = require("stripe")(process.env.PAYMENT_KEY);
 const cookieParser = require('cookie-parser')
+const store_id = 'bistr67951d2a185e3'
+const store_passwd = 'bistr67951d2a185e3@ssl'
 const cors = require('cors');
 const app = express()
 const port = process.env.PORT || 5000
@@ -15,9 +17,10 @@ app.use(cors({
 }))
 app.use(cookieParser())
 app.use(morgan('dev'))
-
+app.use(express.urlencoded())
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { default: axios } = require('axios');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.9cbr8.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -216,6 +219,62 @@ async function run() {
       if(req?.user?.email !== req.params.email) return res.status(403).send({message: 'Forbidden Access'})
         const result = await paymentsCollection.find(query).toArray()
         res.send(result)
+    })
+    // route for ssl comerz payment gateway
+    app.post('/create-ssl-payment', async(req, res) => {
+      const payment = req.body
+      const trxid = new ObjectId().toString()
+      payment.transactionId = trxid
+      console.log(payment);
+      // step - 1 create intiate 
+      const initiate = {
+        store_id: store_id,
+        store_passwd: store_passwd,
+         total_amount: `${payment.price}`,
+         currency: 'BDT',
+         tran_id: trxid, // use unique tran_id for each api call
+         success_url: 'http://localhost:5000/success-payment',
+         fail_url: 'http://localhost:5173/fail',
+         cancel_url: 'http://localhost:5173/cancel',
+         ipn_url: 'http://localhost:5000/ipn-success-payment',
+         shipping_method: 'Courier',
+         product_name: 'Computer.',
+         product_category: 'Electronic',
+         product_profile: 'general',
+         cus_name: 'Customer Name',
+         cus_email: `${payment.email}`,
+         cus_add1: 'Dhaka',
+         cus_add2: 'Dhaka',
+         cus_city: 'Dhaka',
+         cus_state: 'Dhaka',
+         cus_postcode: '1000',
+         cus_country: 'Bangladesh',
+         cus_phone: '01711111111',
+         cus_fax: '01711111111',
+         ship_name: 'Customer Name',
+         ship_add1: 'Dhaka',
+         ship_add2: 'Dhaka',
+         ship_city: 'Dhaka',
+         ship_state: 'Dhaka',
+         ship_postcode: 1000,
+         ship_country: 'Bangladesh',
+     };
+     const iniResponse = await axios({
+      url: 'https://sandbox.sslcommerz.com/gwprocess/v4/api.php',
+      method: 'POST',
+      data: initiate,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+     })
+     const gatewayUrl = iniResponse?.data?.GatewayPageURL 
+     const savedData = await paymentsCollection.insertOne(payment)
+     console.log(gatewayUrl);
+     res.send({gatewayUrl})
+    })
+    app.post('/success-payment', async(req, res) => {
+      const paymentSuccess = req.body 
+      console.log(paymentSuccess);
     })
     // route for show data on admin home 
     app.get('/admin-stats', verifyToken, verifyAdmin,  async(req, res) => {
