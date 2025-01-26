@@ -217,6 +217,59 @@ async function run() {
         const result = await paymentsCollection.find(query).toArray()
         res.send(result)
     })
+    // route for show data on admin home 
+    app.get('/admin-stats', verifyToken, verifyAdmin,  async(req, res) => {
+      const users = await usersCollection.estimatedDocumentCount()
+      const orders = await paymentsCollection.estimatedDocumentCount()
+      const menuItems = await menuCollection.estimatedDocumentCount()
+      const result = await paymentsCollection.aggregate([
+        {
+          $group:{
+            _id: null,
+            totalPrice: {$sum: '$price'}
+          }
+        }
+      ]).toArray()
+      const revenue = result.length>0? result[0].totalPrice: 0
+      res.send({users, orders, menuItems, revenue})
+    })
+    // route for recharts data
+    app.get('/orders-stats', async(req, res) => {
+      const result = await paymentsCollection.aggregate([
+      {$unwind : '$menuIds'},
+      {
+        $addFields:{
+          menuIds: {$toObjectId: '$menuIds'},
+        },
+      },
+      {
+        $lookup: {
+          from: 'menu',
+          localField: 'menuIds',
+          foreignField: '_id',
+          as: 'menuItems',
+        }
+      },
+      {$unwind: '$menuItems'},
+      {
+        $group: {
+          _id: '$menuItems.category',
+          quantity: {$sum: 1},
+          revenue: {$sum: '$menuItems.price'},
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          category: '$_id',
+          quantity: '$quantity',
+          revenue: '$revenue',
+        }
+      }
+
+      ]).toArray()
+      res.send(result)
+    })
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
